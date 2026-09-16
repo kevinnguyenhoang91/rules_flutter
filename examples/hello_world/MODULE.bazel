@@ -1,10 +1,21 @@
 "A minimal Flutter application built with rules_flutter."
 
-bazel_dep(name = "rules_flutter", version = "0.2.0")
+bazel_dep(name = "rules_flutter", version = "0.0.0")
+
+# git_override(
+#     module_name = "rules_flutter",
+#     remote = "https://github.com/kevinnguyenhoang91/rules_flutter.git",
+#     commit = "a0ca3dfc2cf1359cc84663af5ad4a6a6d3b0fc47",
+# )
+
+local_path_override(
+    module_name = "rules_flutter",
+    path = "/Users/khanh9/orca/rules_flutter",
+)
 
 flutter = use_extension("@rules_flutter//flutter:extensions.bzl", "flutter")
 flutter.toolchain(
-    flutter_version = "3.24.0",
+    flutter_version = "3.44.4",
     precache = ["web"],
 )
 use_repo(
