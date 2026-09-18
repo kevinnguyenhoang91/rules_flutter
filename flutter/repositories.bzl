@@ -56,26 +56,34 @@ _PRECACHE_SENTINELS = {
 # rewrites engine.stamp/engine.realm on every launcher invocation. Replaced at
 # fetch time so `flutter` never writes into the Bazel external repository.
 _ENGINE_VERSION_WRITE_ORIGINAL = """# Write the engine version out so downstream tools know what to look for.
-echo $ENGINE_VERSION >"$FLUTTER_ROOT/bin/cache/engine.stamp"
+# Use a temporary file and atomic mv to prevent race conditions during parallel flutter executions.
+pid=$$
+es_tmp="$FLUTTER_ROOT/bin/cache/engine.stamp.tmp.$pid"
+trap 'rm -f "$es_tmp"' EXIT
+echo "$ENGINE_VERSION" >"$es_tmp" && mv "$es_tmp" "$FLUTTER_ROOT/bin/cache/engine.stamp"
+trap - EXIT
 
 # The realm on CI is passed in.
 if [ -n "${FLUTTER_REALM}" ]; then
-  echo $FLUTTER_REALM >"$FLUTTER_ROOT/bin/cache/engine.realm"
+  echo "$FLUTTER_REALM" >"$FLUTTER_ROOT/bin/cache/engine.realm"
 else
   echo "" >"$FLUTTER_ROOT/bin/cache/engine.realm"
 fi"""
 
 _ENGINE_VERSION_WRITE_PATCHED = """# Write the engine version out so downstream tools know what to look for.
-# Patched by rules_flutter: skip writes when the content is already correct so
-# launcher invocations never mutate the Bazel external repository.
+# Use a temporary file and atomic mv to prevent race conditions during parallel flutter executions.
+pid=$$
+es_tmp="$FLUTTER_ROOT/bin/cache/engine.stamp.tmp.$pid"
+trap 'rm -f "$es_tmp"' EXIT
 if [ "$(cat "$FLUTTER_ROOT/bin/cache/engine.stamp" 2>/dev/null)" != "$ENGINE_VERSION" ]; then
-  echo $ENGINE_VERSION >"$FLUTTER_ROOT/bin/cache/engine.stamp"
+    echo "$ENGINE_VERSION" >"$es_tmp" && mv "$es_tmp" "$FLUTTER_ROOT/bin/cache/engine.stamp"
 fi
+trap - EXIT
 
 # The realm on CI is passed in.
 FLUTTER_REALM="${FLUTTER_REALM:-}"
 if [ "$(cat "$FLUTTER_ROOT/bin/cache/engine.realm" 2>/dev/null)" != "$FLUTTER_REALM" ]; then
-  echo $FLUTTER_REALM >"$FLUTTER_ROOT/bin/cache/engine.realm"
+  echo "$FLUTTER_REALM" >"$FLUTTER_ROOT/bin/cache/engine.realm"
 fi"""
 
 def _patch_engine_version_script(repository_ctx):
