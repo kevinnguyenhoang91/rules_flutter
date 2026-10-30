@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 void main() {
   runApp(const HelloWorldApp());
@@ -41,7 +42,18 @@ class _CounterPageState extends State<CounterPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(widget.title)),
+      appBar: AppBar(
+        title: Text(widget.title),
+        actions: <Widget>[
+          IconButton(
+            icon: const Icon(Icons.public),
+            tooltip: 'Open web view',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const WebViewPage()),
+            ),
+          ),
+        ],
+      ),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -58,6 +70,22 @@ class _CounterPageState extends State<CounterPage> {
         onPressed: _incrementCounter,
         tooltip: 'Increment',
         child: const Icon(Icons.add),
+      ),
+    );
+  }
+}
+
+/// Shows a page with `flutter_inappwebview`, demonstrating a hosted pub
+/// dependency (plus its federated platform packages) built through Bazel.
+class WebViewPage extends StatelessWidget {
+  const WebViewPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Web view')),
+      body: InAppWebView(
+        initialUrlRequest: URLRequest(url: WebUri('https://flutter.dev')),
       ),
     );
   }

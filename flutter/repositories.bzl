@@ -55,7 +55,19 @@ _PRECACHE_SENTINELS = {
 # The tail of bin/internal/update_engine_version.sh that unconditionally
 # rewrites engine.stamp/engine.realm on every launcher invocation. Replaced at
 # fetch time so `flutter` never writes into the Bazel external repository.
-_ENGINE_VERSION_WRITE_ORIGINAL = """# Write the engine version out so downstream tools know what to look for.
+# Older SDKs ship the plain `echo` form; newer ones (3.47+) already write
+# engine.stamp through a temp file and mv, but still rewrite it every time.
+_ENGINE_VERSION_WRITE_ORIGINALS = [
+    """# Write the engine version out so downstream tools know what to look for.
+echo $ENGINE_VERSION >"$FLUTTER_ROOT/bin/cache/engine.stamp"
+
+# The realm on CI is passed in.
+if [ -n "${FLUTTER_REALM}" ]; then
+  echo $FLUTTER_REALM >"$FLUTTER_ROOT/bin/cache/engine.realm"
+else
+  echo "" >"$FLUTTER_ROOT/bin/cache/engine.realm"
+fi""",
+    """# Write the engine version out so downstream tools know what to look for.
 # Use a temporary file and atomic mv to prevent race conditions during parallel flutter executions.
 pid=$$
 es_tmp="$FLUTTER_ROOT/bin/cache/engine.stamp.tmp.$pid"
@@ -68,17 +80,19 @@ if [ -n "${FLUTTER_REALM}" ]; then
   echo "$FLUTTER_REALM" >"$FLUTTER_ROOT/bin/cache/engine.realm"
 else
   echo "" >"$FLUTTER_ROOT/bin/cache/engine.realm"
-fi"""
+fi""",
+]
 
 _ENGINE_VERSION_WRITE_PATCHED = """# Write the engine version out so downstream tools know what to look for.
-# Use a temporary file and atomic mv to prevent race conditions during parallel flutter executions.
-pid=$$
-es_tmp="$FLUTTER_ROOT/bin/cache/engine.stamp.tmp.$pid"
-trap 'rm -f "$es_tmp"' EXIT
+# Patched by rules_flutter: skip writes when the content is already correct so
+# launcher invocations never mutate the Bazel external repository. When a write
+# is needed, go through a temp file and an atomic mv so parallel flutter
+# invocations never observe a half-written engine.stamp. (No EXIT trap: this
+# script is sourced and must not clobber the caller's traps.)
 if [ "$(cat "$FLUTTER_ROOT/bin/cache/engine.stamp" 2>/dev/null)" != "$ENGINE_VERSION" ]; then
-    echo "$ENGINE_VERSION" >"$es_tmp" && mv "$es_tmp" "$FLUTTER_ROOT/bin/cache/engine.stamp"
+  es_tmp="$FLUTTER_ROOT/bin/cache/engine.stamp.tmp.$$"
+  echo "$ENGINE_VERSION" >"$es_tmp" && mv "$es_tmp" "$FLUTTER_ROOT/bin/cache/engine.stamp"
 fi
-trap - EXIT
 
 # The realm on CI is passed in.
 FLUTTER_REALM="${FLUTTER_REALM:-}"
@@ -92,19 +106,22 @@ def _patch_engine_version_script(repository_ctx):
     if not repository_ctx.path(script_path).exists:
         return
     content = repository_ctx.read(script_path)
-    if _ENGINE_VERSION_WRITE_ORIGINAL not in content:
-        # Layout changed upstream; fail loudly rather than silently shipping a
-        # mutating launcher. Update the patch alongside new Flutter versions.
-        fail("rules_flutter: unable to patch {} for Flutter {}: unexpected script content. ".format(
-            script_path,
-            repository_ctx.attr.flutter_version,
-        ) + "Update _ENGINE_VERSION_WRITE_ORIGINAL in flutter/repositories.bzl.")
-    repository_ctx.file(
+    for original in _ENGINE_VERSION_WRITE_ORIGINALS:
+        if original in content:
+            repository_ctx.file(
+                script_path,
+                content.replace(original, _ENGINE_VERSION_WRITE_PATCHED),
+                executable = True,
+                legacy_utf8 = False,
+            )
+            return
+
+    # Layout changed upstream; fail loudly rather than silently shipping a
+    # mutating launcher. Update the patch alongside new Flutter versions.
+    fail("rules_flutter: unable to patch {} for Flutter {}: unexpected script content. ".format(
         script_path,
-        content.replace(_ENGINE_VERSION_WRITE_ORIGINAL, _ENGINE_VERSION_WRITE_PATCHED),
-        executable = True,
-        legacy_utf8 = False,
-    )
+        repository_ctx.attr.flutter_version,
+    ) + "Add the new form to _ENGINE_VERSION_WRITE_ORIGINALS in flutter/repositories.bzl.")
 
 def _host_matches_platform(repository_ctx, platform):
     os_name = repository_ctx.os.name.lower()
