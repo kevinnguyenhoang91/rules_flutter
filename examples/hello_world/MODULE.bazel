@@ -4,7 +4,7 @@ bazel_dep(name = "rules_flutter", version = "0.2.0")
 
 flutter = use_extension("@rules_flutter//flutter:extensions.bzl", "flutter")
 flutter.toolchain(
-    flutter_version = "3.24.0",
+    flutter_version = "3.47.4",
     precache = ["web"],
 )
 use_repo(
@@ -17,8 +17,18 @@ register_toolchains("@flutter_toolchains//:all")
 
 # One repository per hosted pub package, discovered from the checked-in
 # pub_deps.json. After editing pubspec.yaml, run `bazel run //:lib.update`,
-# then expose direct deps here (`pub = use_extension(...)` +
-# `use_repo(pub, "pub_<package>")`) and reference them as
-# @pub_<package>//:<package>. No use_repo entries are needed while the app
-# only uses SDK packages.
-use_extension("@rules_flutter//flutter:extensions.bzl", "pub")
+# then expose direct deps here (`use_repo(pub, "pub_<package>")`) and
+# reference them as @pub_<package>//:<package>.
+#
+# clock, stack_trace, vector_math and vm_service are SDK-constrained, but
+# pub_deps.json pins newer versions than the SDK cache supplies, so they are
+# depended on explicitly to publish the pinned versions into the cache.
+pub = use_extension("@rules_flutter//flutter:extensions.bzl", "pub")
+use_repo(
+    pub,
+    "pub_clock",
+    "pub_flutter_inappwebview",
+    "pub_stack_trace",
+    "pub_vector_math",
+    "pub_vm_service",
+)
